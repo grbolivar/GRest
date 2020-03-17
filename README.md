@@ -1,6 +1,6 @@
 # GRest
 
-Simple RESTful API Client with OOP.
+RESTful service wrapper with Promises and OOP.
 
 ## Usage
 
@@ -50,10 +50,10 @@ Request some endpoint. On this example, this endpoint responds a valid JWT if th
 authenticates correctly. This will result on this request:
 POST https://api.net/auth/login
 */
-api.authLogin.post({ email, pass }).ok( newJwt => {
+api.authLogin.post({ email, pass }).then( response => {
 	//We have the JWT, set it so it's sent on every request from now on
-	api.authorization = "Bearer " + newJwt; //Using Authorization Bearer schema
-}).fail(error => {
+	api.authorization = "Bearer " + response.data.newJwt; //Using Bearer schema
+}).catch(error => {
 	//Request failed
 });
 
@@ -61,27 +61,27 @@ api.authLogin.post({ email, pass }).ok( newJwt => {
 Request other endpoints. This will result on this request:
 GET https://api.net/users/?foo=bar
 */
-api.users.get("?foo=bar").ok(data => ...);
+api.users.get("?foo=bar").then(({data}) => ...);
 
-//This will result on the same request
-api.users.get({ foo: "bar" }).ok(data => ...);
+//This results on the same request
+api.users.get({ foo: "bar" }).then(({data}) => ...);
 
 /*
 Request a single user resource. Results on this request:
 GET https://api.net/users/12345
 */
 let uid = "12345";
-api.users.get(uid).ok(data => ...);
+api.users.get(uid).then(({data}) => ...);
 
 /*
 Set a more customizable request, eg, if you need to send headers, etc. Just pass an Axios's
-config obj. Keep in mind the url prop and 'X-Requested-With' header will be ignored and
+config obj. Keep in mind the 'X-Requested-With' header will be ignored and
 overwriten. The following will result on this request:
-POST https://api.net/users/?foo=bar&abc=1
+POST https://api.net/users/12345?foo=bar&abc=1
 */
 api.users.http({
 	method: 'post',
-	url: 'http://another-api.com/endpoint', //will be ignored
+	url: '12345', //will be appended to url
 	headers:{
 		"X-Requested-With": "Hello world", //will be ignored
 		"One-Time-Header": "1", //will send this header only on this request
@@ -92,38 +92,7 @@ api.users.http({
 		foo: "bar",
 		abc: 1 
 	}
-}).ok( data => ... ).fail( error => ... );
-
-/*
-You can store the request to execute it again in the future. This will actually perform
-a new request to the api EXACTLY how it was performed the first time (same headers, etc),
-also, notifies all observers too. New ok()'s and fail()'s need to be provided.
-*/
-let allUsers = api.users.get().ok( data => ... );
-//....later....
-allUsers.again().ok( data => ... ).fail( error => ... );
-
-/*
-Careful when storing requests, calls to ok() WILL NOT perform new requests but return
-the last request's cached result, this may lead to situations where the API's data gets
-updated/mutated resulting on the cached data to be outdated. E.g.:
-*/
-//Creates a new user
-api.users.post({ newUserData }).ok( _ => {
-
-	//data is outdated! it cointains the last request cached result
-	allUsers.ok( data => ... ); //The new user is not here
-
-	//call again() to get fresh results, data is now updated
-	allUsers.again().ok( data => ... )
-
-});
-
-/*
-ok()'s and fail()'s can be chained, they will execute in order. These are NOT Promises, eg,
-the next ok()'s data is the same original data, not the return value of the previous ok()
-*/
-api.supportTickets.get().ok(data => ...).ok(data => ...).ok(data => ...)
+}).then(({data}) => ...).catch( error => ... );
 
 /*
 Session ends. From now on, no Authorization header will be sent automatically, unless you
@@ -132,15 +101,12 @@ completely ignored and you have to unset the header with:
 api.headers({"Authorization": null})
 */
 api.authorization = null;
-
-//Free resources when finished
-api.release();
 ```
 
 ## Dependencies
 
 [axios](https://github.com/axios/axios)
-[GObservable](https://cdn.jsdelivr.net/gh/grbolivar/jsutils/v1/GObservable.min.js)
+[GObservable](https://cdn.jsdelivr.net/gh/grbolivar/jsutils/patterns/GObservable.min.js)
 
 ## Installing
 
@@ -149,7 +115,7 @@ api.release();
 ```html
 <!-- Dependencies -->
 <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/grbolivar/jsutils/v1/GObservable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/grbolivar/jsutils/patterns/GObservable.min.js"></script>
 <!-- GRest -->
 <script src="https://cdn.jsdelivr.net/gh/grbolivar/GRest/GRest.min.js"></script>
 ```

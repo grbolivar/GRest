@@ -1,10 +1,10 @@
 /**
-GRest 2.1.1
-RESTful service wrapper. REST APIs made easy!
+GRest 3.0.0
+RESTful service wrapper with Promises and OOP.
 
 DEPENDENCIES:
 axios
-v1/GObservable
+GObservable
 */
 
 
@@ -23,7 +23,7 @@ class GRest extends GObservable {
 		this._endpoints = [];
 		this._headers = {};
 
-		//normalize the url so it ends with /
+		//normalize url so it ends with /
 		this.url = url.replace(/[\/]*$/, "/");
 		this.authorization = authorization;
 	}
@@ -44,6 +44,7 @@ class GRest extends GObservable {
 			camelCase
 			;
 
+		//Get method
 		if (!list) return endpoints;
 
 		//concat and remove dupes
@@ -57,7 +58,7 @@ class GRest extends GObservable {
 				i == 0 ? e : e.charAt(0).toUpperCase() + e.slice(1)
 			).join("");
 
-			_this[camelCase] = new GRestEndpoint(endpoint, _this);
+			_this[camelCase] = new GRestEndpoint(endpoint, this);
 		});
 
 		return _this;
@@ -81,6 +82,7 @@ class GRest extends GObservable {
 		return this;
 	}
 
+	/*
 	release() {
 		let _this = this;
 		Object.keys(_this).forEach(k => {
@@ -90,6 +92,7 @@ class GRest extends GObservable {
 			delete _this[k];
 		});
 	}
+	*/
 };
 
 
@@ -114,6 +117,8 @@ class GRestEndpoint {
 	*/
 	http(axiosCnf, queryString) {
 		let
+			method = axiosCnf.method,
+
 			api = this._api,
 
 			auth = api.authorization,
@@ -121,6 +126,9 @@ class GRestEndpoint {
 			//Append API's global headers & overwrite them if provided here. DO NOT modify original! Make a copy
 			headers = axiosCnf.headers = Object.assign({}, api.headers(), axiosCnf.headers || {})
 			;
+
+		//Notify observers
+		this._notify(method, "pending");
 
 		//Auto-set request type
 		headers['X-Requested-With'] = 'XMLHttpRequest';
@@ -131,7 +139,7 @@ class GRestEndpoint {
 		}
 
 		//URL
-		axiosCnf.url = this._url;
+		axiosCnf.url = this._url + (axiosCnf.url || "");
 
 		//Process queryString which can be String or Object
 		let qsType = typeof queryString;
@@ -145,12 +153,38 @@ class GRestEndpoint {
 			axiosCnf.url += queryString;
 		}
 
-		//This is needed for observing purposes, see GRestRequest
-		axiosCnf.endpoint = this.name;
-
 		//console.log(axiosCnf);
 
-		return new GRestRequest(axiosCnf, this.api);
+		return axios(axiosCnf)
+			//Normalize response object
+			.then(response => (
+				this._notify(method, "ok"),
+				response
+			))
+			//Normalize error object
+			.catch(err => {
+				this._notify(method, "fail");
+
+				//Can be NULL/undefined if network error
+				let errorResponse = err.response;
+
+				//Only "message" is guaranteed
+				throw errorResponse ? {
+					message: errorResponse.statusText || "Error",
+					status: errorResponse.status,
+					data: errorResponse.data
+				} : {
+						message: err.message || "Network Error"
+					}
+			})
+	}
+
+	_notify(method, status) {
+		this._api.notify({
+			endpoint: this.name,
+			method,
+			status
+		});
 	}
 
 	/** 
@@ -158,7 +192,7 @@ class GRestEndpoint {
 	@param {String|Object} queryString
 	*/
 	get(queryString) {
-		return this._getDel("get", queryString);
+		return this._requestWithQuery("get", queryString);
 	}
 
 	/** 
@@ -167,7 +201,7 @@ class GRestEndpoint {
 	@param {Object} data
 	*/
 	post(queryStringOrData, data) {
-		return this._postPut("post", queryStringOrData, data)
+		return this._requestWithQueryAndData("post", queryStringOrData, data)
 	}
 
 	/** 
@@ -176,7 +210,7 @@ class GRestEndpoint {
 	@param {Object} data
 	*/
 	put(queryStringOrData, data) {
-		return this._postPut("put", queryStringOrData, data)
+		return this._requestWithQueryAndData("put", queryStringOrData, data)
 	}
 
 	/** 
@@ -184,16 +218,16 @@ class GRestEndpoint {
 	@param {String|Object} queryString To be sent as query string
 	*/
 	delete(queryString) {
-		return this._getDel("delete", queryString);
+		return this._requestWithQuery("delete", queryString);
 	}
 
 	//Private
-	_getDel(method, queryString) {
+	_requestWithQuery(method, queryString) {
 		return this.http({ method }, queryString);
 	}
 
 	//Private
-	_postPut(method, queryStringOrData, data) {
+	_requestWithQueryAndData(method, queryStringOrData, data) {
 		if (!data) {
 			data = queryStringOrData;
 			queryStringOrData = null;
@@ -201,138 +235,10 @@ class GRestEndpoint {
 		return this.http({ method, data }, queryStringOrData);
 	}
 
+	/*
 	release() {
 		delete this.name;
 		delete this._api;
 	}
-};
-
-
-
-/**
-Just a wrapper to AXIOS that adds two useful chainable methods:
-
-ok(fn(data, response))
-fn() invoked when the requests completes successfully.
-	data: holds the response data as Axios delivers it (eg. JSON)
-	response: normalized object with response metadata:
-		status: http status
-		headers: response headers
-
-fail(fn(error))
-fn() invoked if the request failed.
-	error: normalized object with error info:
-		status: http status
-		code: error code
-		msg: error message
-
-Usage:
-new GRestRequest({ axiosConfig }).ok(data => ...).fail(error => ...)
-
-ok() and fail() can be chained and they will be invoked in order when the request gets resolved:
-request.ok(data => ...).ok(data => ...).ok(data => ...).fail(error => ...)
-
-Also, an GObservable can be pased on construction, whose observers will be notified about the request's status. Pass a special "endpoint" attribute on axiosConfig to notify observers of the endpoint name being requested. Observers will receive this object:
-{
-	endpoint: name of endpoint beign requested (only if provided on axiosConfig.endpoint, otherwise will be NULL)
-	method: HTTP method requested
-	status: "pending"|"ok"|"fail"
-}
-*/
-class GRestRequest {
-
-	constructor(axiosConfig, observable) {
-		this._axios = axiosConfig;
-		this._observable = observable;
-		this._obsMsg = {
-			endpoint: axiosConfig.endpoint || null,
-			method: axiosConfig.method
-		};
-
-		//Do the request immediately
-		this.again();
-	}
-
-	/**
-	Performs a new request using the axios config provided
 	*/
-	again() {
-		this._notify("pending");
-
-		this._res = undefined;
-		this._err = undefined;
-
-		this._onOk = [];
-		this._onErr = [];
-
-		axios(this._axios)
-			.then(r => {
-
-				//Normalize response
-				let res = [r.data, {
-					status: r.status,
-					headers: r.headers
-				}];
-				this._res = res;
-
-				//Avoid observers throwing exceptions and axios catching them
-				try {
-					this._onOk.forEach(f => f(res[0], res[1]));
-				} catch (e) { console.log(e) }
-
-				this._onOk = [];
-
-				this._notify("ok");
-
-			})
-			.catch(e => {
-
-				let
-					//Normalize error
-					err = {
-						message: e.message || "Network Error"
-					},
-					response = e.response
-					;
-
-				//response can be undefined if network error
-				if (response) {
-					err.message = response.statusText || "Error";
-					["data", "status", "headers"].forEach(
-						key => err[key] = response[key]
-					);
-				}
-
-				this._err = err;
-
-				this._onErr.forEach(f => f(err));
-				this._onErr = [];
-
-				this._notify("fail");
-
-			})
-			;
-
-		return this;
-	}
-
-	ok(fn) {
-		let res = this._res;
-		typeof res != "undefined" ? fn(res[0], res[1]) : this._onOk.push(fn);
-		return this;
-	}
-
-	fail(fn) {
-		let err = this._err;
-		typeof err != "undefined" ? fn(err) : this._onErr.push(fn);
-		return this;
-	}
-
-	_notify(status) {
-		if (this._observable) {
-			this._obsMsg.status = status;
-			this._observable.notify(this._obsMsg);
-		}
-	}
-
 };
