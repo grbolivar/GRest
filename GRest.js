@@ -139,7 +139,7 @@ class GRestEndpoint {
 		}
 
 		//URL
-		axiosCnf.url = this._url + (axiosCnf.url || "");
+		axiosCnf.url = this._url;
 
 		//Process queryString which can be String or Object
 		let qsType = typeof queryString;
@@ -234,11 +234,4 @@ class GRestEndpoint {
 		}
 		return this.http({ method, data }, queryStringOrData);
 	}
-
-	/*
-	release() {
-		delete this.name;
-		delete this._api;
-	}
-	*/
 };

@@ -81,18 +81,21 @@ POST https://api.net/users/12345?foo=bar&abc=1
 */
 api.users.http({
 	method: 'post',
-	url: '12345', //will be appended to url
+	url: 'https://another-api.net', //will be ignored
 	headers:{
 		"X-Requested-With": "Hello world", //will be ignored
 		"One-Time-Header": "1", //will send this header only on this request
 		"Accept-version": "4.0", //will overwrite the global header set above
 		"Authorization": "abc" //will send this and not the JWT set above
 	},
+	data: { 
+		name: "Greg" 
+	},
 	params:{
 		foo: "bar",
 		abc: 1 
 	}
-}).then(({data}) => ...).catch( error => ... );
+}, "12345").then(({data}) => ...).catch( error => ... );
 
 /*
 Session ends. From now on, no Authorization header will be sent automatically, unless you
